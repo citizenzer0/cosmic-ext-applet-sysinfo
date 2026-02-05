@@ -4,7 +4,7 @@ build:
 	cargo build --release
 
 export NAME := 'cosmic-ext-applet-sysinfo'
-export APPID := 'io.github.cosmic_utils.sysinfo-applet'
+export APPID := 'com.github.citizenzer0.CosmicUpsMonitor'
 
 cargo-target-dir := env('CARGO_TARGET_DIR', 'target')
 bin-src := cargo-target-dir / 'release' / NAME

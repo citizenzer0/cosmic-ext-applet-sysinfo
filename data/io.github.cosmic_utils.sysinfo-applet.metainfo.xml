@@ -6,7 +6,7 @@
   <project_group>COSMIC</project_group>
   <developer_name>rwxroot</developer_name>
   <update_contact>rwxroot@proton.me</update_contact>
-  <name>System Monitor</name>
+  <name>UPS & System Monitor</name>
   <url type="homepage">https://github.com/cosmic-utils/cosmic-ext-applet-sysinfo</url>
   <url type="bugtracker">https://github.com/cosmic-utils/cosmic-ext-applet-sysinfo/issues</url>
   <url type="contribute">https://github.com/cosmic-utils/cosmic-ext-applet-sysinfo</url>

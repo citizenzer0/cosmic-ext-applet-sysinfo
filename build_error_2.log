@@ -1,0 +1,34 @@
+    Checking cosmic-ext-applet-sysinfo v0.1.0 (/home/cz0x00/cosmic-ext-applet-sysinfo)
+error[E0599]: no method named `palette` found for enum `Option<T>` in the current scope
+   --> src/applet.rs:235:38
+    |
+235 | ...heme().palette().text
+    |           ^^^^^^^ method not found in `Option<cosmic::Theme>`
+
+error[E0277]: the trait bound `Text: From<...>` is not satisfied
+    --> src/applet.rs:241:75
+     |
+ 241 | ...temp)).color(ups_color),
+     |           ^^^^^ unsatisfied trait bound
+     |
+help: the trait `From<Box<dyn for<'a> std::ops::Fn(&'a cosmic::Theme) -> cosmic::iced_widget::text::Style>>` is not implemented for `cosmic::theme::Text`
+      but trait `From<cosmic::iced::Color>` is implemented for it
+    --> /home/cz0x00/.cargo/git/checkouts/libcosmic-41009aea1d72760b/cf19ac6/src/theme/style/iced.rs:1295:1
+     |
+1295 | impl From<Color> for Text {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+     = help: for that trait implementation, expected `cosmic::iced::Color`, found `Box<...>`
+note: required by a bound in `cosmic::iced_core::widget::Text::<'a, Theme, Renderer>::color`
+    --> /home/cz0x00/.cargo/git/checkouts/libcosmic-41009aea1d72760b/cf19ac6/iced/core/src/widget/text.rs:183:27
+     |
+ 181 | ...fn color(self, color: impl Into<Color>) -> Self
+     |       ----- required by a bound in this associated function
+ 182 | ...e
+ 183 | ...Theme::Class<'a>: From<StyleFn<'a, Theme>>,
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Text::<'a, Theme, Renderer>::color`
+     = note: the full name for the type has been written to '/home/cz0x00/cosmic-ext-applet-sysinfo/target/debug/deps/cosmic_ext_applet_sysinfo-3406405fd1217e0a.long-type-1760485376356986539.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+
+Some errors have detailed explanations: E0277, E0599.
+For more information about an error, try `rustc --explain E0277`.
+error: could not compile `cosmic-ext-applet-sysinfo` (bin "cosmic-ext-applet-sysinfo") due to 2 previous errors

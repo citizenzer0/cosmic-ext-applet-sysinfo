@@ -1,0 +1,12 @@
+
+module my-upsmon 1.0;
+
+require {
+	type nut_upsmon_t;
+	class capability dac_override;
+}
+
+#============= nut_upsmon_t ==============
+
+#!!!! This avc is allowed in the current policy
+allow nut_upsmon_t self:capability dac_override;

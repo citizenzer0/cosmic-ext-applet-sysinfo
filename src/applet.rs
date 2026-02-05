@@ -29,6 +29,7 @@ struct SysInfo {
     upload_speed: f64,
     last_scan: Instant,
     physical_interfaces: Vec<String>,
+    ups_temp: String,
 }
 
 impl SysInfo {
@@ -95,6 +96,7 @@ impl SysInfo {
 
         self.upload_speed = (upload as f64) / 1_000_000.0;
         self.download_speed = (download as f64) / 1_000_000.0;
+        self.ups_temp = get_ups_temp();
     }
 }
 
@@ -148,6 +150,7 @@ impl cosmic::Application for SysInfo {
                 upload_speed: 0.00,
                 last_scan,
                 physical_interfaces,
+                ups_temp: String::from("..."),
             },
             cosmic::task::none(),
         )
@@ -224,15 +227,16 @@ impl cosmic::Application for SysInfo {
     }
 
     fn view(&self) -> cosmic::Element<'_, Message> {
-        let data = {
-            cosmic::iced_widget::row![
-                cosmic::iced_widget::text(format!("CPU {:.0}%", self.cpu_usage)),
-                cosmic::iced_widget::text(format!("RAM {}%", self.ram_usage)),
-                cosmic::iced_widget::text(format!("↓{:.2}M/s", self.download_speed)),
-                cosmic::iced_widget::text(format!("↑{:.2}M/s", self.upload_speed)),
-            ]
-            .spacing(4)
-        };
+        let ups_text = cosmic::widget::text(format!("UPS {}°C", self.ups_temp));
+
+        let data = cosmic::iced_widget::row![
+            cosmic::iced_widget::text(format!("CPU {:.0}%", self.cpu_usage)),
+            cosmic::iced_widget::text(format!("RAM {}%", self.ram_usage)),
+            ups_text,
+            cosmic::iced_widget::text(format!("↓{:.2}M/s", self.download_speed)),
+            cosmic::iced_widget::text(format!("↑{:.2}M/s", self.upload_speed)),
+        ]
+        .spacing(4);
 
         let button = cosmic::widget::button::custom(data)
             .class(cosmic::theme::Button::AppletIcon)
@@ -260,4 +264,20 @@ impl cosmic::Application for SysInfo {
             .popup_container(cosmic::widget::container(data))
             .into()
     }
+}
+
+fn get_ups_temp() -> String {
+    let output = std::process::Command::new("upsc")
+        .arg("eaton@localhost")
+        .output();
+
+    if let Ok(out) = output {
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        for line in stdout.lines() {
+            if line.contains("ups.temperature") {
+                return line.split(':').nth(1).unwrap_or("N/A").trim().to_string();
+            }
+        }
+    }
+    "N/A".to_string()
 }

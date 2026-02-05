@@ -4,7 +4,7 @@ use cosmic::cosmic_config::{
 
 const CONFIG_VERSION: u64 = 1;
 
-pub(crate) const APP_ID: &str = "io.github.cosmic-utils.cosmic-ext-applet-sysinfo";
+pub(crate) const APP_ID: &str = "com.github.citizenzer0.CosmicUpsMonitor";
 
 #[derive(Default, Debug, Clone, CosmicConfigEntry)]
 pub(crate) struct SysInfoConfig {
