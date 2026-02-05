@@ -4,7 +4,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use sysinfo::{CpuRefreshKind, MemoryRefreshKind, Networks, RefreshKind, System};
+use nvml_wrapper::Nvml;
+use sysinfo::{Components, CpuRefreshKind, MemoryRefreshKind, Networks, RefreshKind, System};
 use tracing::{debug, trace};
 
 use crate::{
@@ -23,13 +24,21 @@ struct SysInfo {
     config_handler: Option<cosmic::cosmic_config::Config>,
     system: System,
     networks: Networks,
+    components: Components,
     cpu_usage: f32,
+    cpu_temp: Option<f32>,
     ram_usage: u64,
     download_speed: f64,
     upload_speed: f64,
     last_scan: Instant,
     physical_interfaces: Vec<String>,
     ups_temp: String,
+    // GPU monitoring (NVIDIA only via NVML)
+    nvml: Option<Nvml>,
+    gpu_load: Option<u32>,
+    gpu_temp: Option<u32>,
+    gpu_vram_used: Option<u64>,
+    gpu_vram_total: Option<u64>,
 }
 
 impl SysInfo {
@@ -82,6 +91,21 @@ impl SysInfo {
             (self.system.used_memory() * 100) / self.system.total_memory()
         };
 
+        // Refresh CPU temperature from components
+        // Look for common CPU temperature sensor labels: k10temp (AMD), coretemp (Intel), or "cpu"
+        self.components.refresh(true);
+        self.cpu_temp = self
+            .components
+            .iter()
+            .find(|c| {
+                let label = c.label().to_lowercase();
+                label.contains("k10temp")
+                    || label.contains("coretemp")
+                    || label.contains("cpu")
+                    || label.contains("tctl") // AMD Ryzen Tctl
+            })
+            .and_then(|c| c.temperature());
+
         self.networks.refresh(true);
 
         let mut upload = 0;
@@ -97,6 +121,23 @@ impl SysInfo {
         self.upload_speed = (upload as f64) / 1_000_000.0;
         self.download_speed = (download as f64) / 1_000_000.0;
         self.ups_temp = get_ups_temp();
+
+        // Update GPU stats from NVML (NVIDIA only)
+        if let Some(ref nvml) = self.nvml {
+            if let Ok(device) = nvml.device_by_index(0) {
+                // GPU utilization (load)
+                self.gpu_load = device.utilization_rates().ok().map(|u| u.gpu);
+                // GPU temperature
+                self.gpu_temp = device
+                    .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
+                    .ok();
+                // GPU VRAM
+                if let Ok(mem_info) = device.memory_info() {
+                    self.gpu_vram_used = Some(mem_info.used / (1024 * 1024)); // Convert to MB
+                    self.gpu_vram_total = Some(mem_info.total / (1024 * 1024)); // Convert to MB
+                }
+            }
+        }
     }
 }
 
@@ -132,9 +173,13 @@ impl cosmic::Application for SysInfo {
                 .with_cpu(CpuRefreshKind::nothing().with_cpu_usage()),
         );
         let networks = Networks::new_with_refreshed_list();
+        let components = Components::new_with_refreshed_list();
 
         let last_scan = Instant::now();
         let physical_interfaces = SysInfo::get_physical_interfaces(&config);
+
+        // Initialize NVML for NVIDIA GPU monitoring (may fail on non-NVIDIA systems)
+        let nvml = Nvml::init().ok();
 
         (
             Self {
@@ -144,13 +189,20 @@ impl cosmic::Application for SysInfo {
                 config_handler: flags.config_handler,
                 system,
                 networks,
+                components,
                 cpu_usage: 0.0,
+                cpu_temp: None,
                 ram_usage: 0,
                 download_speed: 0.00,
                 upload_speed: 0.00,
                 last_scan,
                 physical_interfaces,
                 ups_temp: String::from("..."),
+                nvml,
+                gpu_load: None,
+                gpu_temp: None,
+                gpu_vram_used: None,
+                gpu_vram_total: None,
             },
             cosmic::task::none(),
         )
@@ -227,16 +279,48 @@ impl cosmic::Application for SysInfo {
     }
 
     fn view(&self) -> cosmic::Element<'_, Message> {
-        let ups_text = cosmic::widget::text(format!("UPS {}°C", self.ups_temp));
+        // Format CPU temp (show N/A if unavailable)
+        let cpu_temp_str = self
+            .cpu_temp
+            .map(|t| format!("{:.0}°C", t))
+            .unwrap_or_else(|| "N/A".to_string());
 
-        let data = cosmic::iced_widget::row![
-            cosmic::iced_widget::text(format!("CPU {:.0}%", self.cpu_usage)),
-            cosmic::iced_widget::text(format!("RAM {}%", self.ram_usage)),
-            ups_text,
-            cosmic::iced_widget::text(format!("↓{:.2}M/s", self.download_speed)),
-            cosmic::iced_widget::text(format!("↑{:.2}M/s", self.upload_speed)),
-        ]
-        .spacing(4);
+        // Format GPU stats
+        let gpu_display = match (
+            self.gpu_load,
+            self.gpu_temp,
+            self.gpu_vram_used,
+            self.gpu_vram_total,
+        ) {
+            (Some(load), Some(temp), Some(used), Some(total)) => {
+                format!(
+                    "GPU {}% {}°C {:.1}/{:.1}GB",
+                    load,
+                    temp,
+                    used as f64 / 1024.0,
+                    total as f64 / 1024.0
+                )
+            }
+            _ => "GPU N/A".to_string(),
+        };
+
+        let data = {
+            cosmic::iced_widget::row![
+                cosmic::iced_widget::text(format!("CPU {:.0}% {}", self.cpu_usage, cpu_temp_str)),
+                cosmic::iced_widget::text("|"),
+                cosmic::iced_widget::text(format!("RAM {}%", self.ram_usage)),
+                cosmic::iced_widget::text("|"),
+                cosmic::iced_widget::text(format!("UPS {}°C", self.ups_temp)),
+                cosmic::iced_widget::text("|"),
+                cosmic::iced_widget::text(gpu_display),
+                cosmic::iced_widget::text("|"),
+                cosmic::iced_widget::text(format!(
+                    "↓{:.2}M/s ↑{:.2}M/s",
+                    self.download_speed, self.upload_speed
+                )),
+            ]
+            .spacing(4)
+        };
 
         let button = cosmic::widget::button::custom(data)
             .class(cosmic::theme::Button::AppletIcon)
